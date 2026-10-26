@@ -2,81 +2,84 @@
 
 **Fix Windows DPI coordinate scaling for desktop automation (PowerShell + .NET, zero dependencies).**
 
-Windows DPI 缩放下 PowerShell/Windows API 截图与点击坐标不一致的完整解决方案。纯 PowerShell + .NET 实现，零外部依赖，无需安装任何东西。
+This is a solution to  the mismatch between screenshot and click coordinates in PowerShell/Windows API under Windows DPI scaling. Completely realized by PowerShell + .NET , do not need to install anything else.
 
-## The Problem / 问题根因
 
-Windows 开启 DPI 缩放（125%/150%/200%/250% 等）后存在**两套坐标系**：
+## The Problem
 
-- **物理分辨率**：显示器实际像素点数量（如 2560x1600）
-- **逻辑分辨率**：缩放后应用看到的分辨率（如 2560÷2.5=1024, 1600÷2.5=640）
+Window has two coordinates when launching DPI scaling(e.g 125%/150%/200%/250%)
 
-PowerShell 默认**不是 DPI 感知进程**，会导致两个典型故障：
+- **Phythical resolution**：the real pixels of the monitor（e.g 2560x1600）
+- **Logical resolution**：resolution after scaling（e.g 2560÷2.5=1024, 1600÷2.5=640）
 
-1. **截图只显示左上角一部分** — `PrimaryScreen.Bounds` 返回逻辑分辨率，而 `CopyFromScreen` 按物理像素截取，两者混用就只截到左上角一块
-2. **点击永远点偏** — 截图读出来的是物理坐标，而 `SetCursorPos` 在非 DPI-aware 进程中接受逻辑坐标，直接混用必然错位
+By default,PowerShell is not a DPI-aware process, which leads to two typical failures:
 
-## The Solution / 核心方法（实测验证）
+1. **The screenshots only show the top-left corner** — `PrimaryScreen.Bounds` return logical resolution, while `CopyFromScreen` captures the phythical resolution, which caused it can only capture the top-left corner.
+2. **Click the wrong place** - via screenshots, we can only read the physical coordinates, however, the `SetCursorPos` accept logical coordinates,in a non-DPI-aware process ,so mixing the two directly will inevitably cause a mismatch.
 
+
+## The Solution
 ```
-截图用物理坐标读，点击用逻辑坐标写，中间除以缩放系数。
+Capture screenshots in physical coordinates.Click in logical coordinates.And divide by the scaling factor in between.
 ```
 
-| 步骤 | 坐标系 | 说明 |
+| step | Coordinate system | Explain |
 |------|--------|------|
-| 检测 | — | `PrimaryScreen.Bounds` 得逻辑分辨率，算出缩放系数（物理÷逻辑） |
-| 截图 | 物理 | `CopyFromScreen` 用物理尺寸（如 2560x1600）截全屏 |
-| 读坐标 | 物理 | 从截图上读到的就是物理坐标 |
-| 换算 | — | 逻辑坐标 = 物理坐标 ÷ 缩放系数 |
-| 点击 | 逻辑 | `SetCursorPos` + `mouse_event` 用逻辑坐标 |
+| detect | — | get logical resolution via`PrimaryScreen.Bounds` ,and caculate the scaling factor(physical resolution devide logical resolution) |
+| capture | Physical | `CopyFromScreen` capture the full screen by physical coordinates |
+| read the coordinates | Physical | read from the screenshot |
+| convert | — | logical coordinates = physical coordinates / scaling factor |
+| click | logical | `SetCursorPos` + `mouse_event` ,which use physical coordinates |
 
-## Quick Start / 快速开始
+## Quick Start
 
 ```powershell
-# 1. 检测当前缩放比例
+# 1. detect the scaling ratio
 .\scripts\detect-dpi.ps1
 
-# 2. 物理分辨率截全屏
+# 2. capture full-screen by physical coordinates
 .\scripts\screenshot.ps1 -OutputPath "screen.png"
 
-# 3. 逻辑坐标点击（从截图读出物理坐标后 ÷ 缩放系数）
+# 3. click by logical coordinates(which caculated from physical coordinates and scaling factor)
 .\scripts\click.ps1 -X 344 -Y 10
 ```
 
-## Special Case / 特殊情况：直接改分辨率
+## Special Case
 
-用户直接改**分辨率**（如 2560x1600 → 800x600）而非缩放时：
+when the user change the **resolution**(e.g 2560x1600 -> 800x600) directly rather than scaling:
 
-- `SetProcessDPIAware()` 前后 `GetSystemMetrics` 都返回新分辨率 → 确认是改分辨率（缩放系数=1.0）
-- 截图用当前桌面分辨率（800x600）即可，点击坐标 1:1 直接用
-- 若还用物理大分辨率截，得到的是**拉伸 3.2 倍**的画面，坐标需除以拉伸倍数
+- `SetProcessDPIAware()` and `GetSystemMetrics` return new resolution -> confirm that its change the resolution(scaling factor = 1.0)
+- its ok to capture the resolution in desktop directly , use the click coordinates
+- if it used the bigger resolution to captured, it returns **stretch 3.2 times**, the coordinates need to be devided by scaling factor
 
-## Verified / 实测验证记录
 
-| 场景 | 缩放/分辨率 | 结果 |
+
+## Verified--
+
+| Scenario | Scaling/Resolution | Result |
 |------|------------|------|
-| 150% 缩放 | 逻辑 1707x1067 | 点击成功 ✅ |
-| 250% 缩放 | 逻辑 1024x640 | 物理坐标点击失败、逻辑坐标点击成功 ✅ |
-| 200% 缩放 | 逻辑 1280x800 | 点击微信图标成功 ✅ |
-| 800x600 分辨率 | 物理=逻辑 | 点击 WorkBuddy 菜单成功 ✅ |
+| 150% scaling | Logical 1707x1067 | Click succeeded |
+| 250% scaling | Logical 1024x640 | Physical-coordinate click failed, logical-coordinate click succeeded |
+| 200% scaling | Logical 1280x800 | Successfully clicked the WeChat icon |
+| 800x600 resolution | Physical = Logical | Successfully clicked the WorkBuddy menu |
 
-## Known Dead Ends / 已验证的死路
+## Known Dead Ends
 
-- `computer_use_tool` (plane="cu") 截屏在关闭虚拟显示器时全黑，不可用于观察真实桌面
-- 把截图物理坐标直接灌进 `SetCursorPos`，缩放 >100% 时必然点偏（250% 下实测偏移 2.5 倍）
+- `computer_use_tool` (plane="cu") screenshots come out completely black when the virtual display is off, so it cannot be used to observe the real desktop
+- Feeding physical screenshot coordinates straight into `SetCursorPos` will always miss when scaling > 100% (measured a 2.5× offset at 250%)
 
-## Relation to precision-desktop / 与同类项目的关系
+## Relation to precision-desktop / Similar Projects
 
-GitHub 上 [precision-desktop](https://github.com/ikoskela/precision-desktop) 解决同一问题域，但实现路径不同：
+[precision-desktop](https://github.com/ikoskela/precision-desktop) on GitHub solves the same problem space, but takes a different implementation path:
 
-| 维度 | precision-desktop | 本项目 |
+| Dimension | precision-desktop | This project |
 |------|------------------|--------|
-| 形态 | Python MCP server（需安装 MCP SDK） | Skill + PowerShell 脚本（零依赖） |
-| 元素定位 | UI Automation 按名称查找 | 截图视觉定位（对 Electron 应用也有效） |
-| 校准 | 人工提供参考点 + 持久化 | 每次自动检测缩放系数 |
-| 点击坐标 | 面向 DPI-aware 工具（物理坐标） | 面向非 DPI-aware PowerShell（逻辑坐标） |
+| Form | Python MCP server (requires installing the MCP SDK) | Skill + PowerShell scripts (zero dependencies) |
+| Element location | UI Automation lookup by name | Visual location from screenshots (also works for Electron apps) |
+| Calibration | Manually provided reference points + persistence | Auto-detects the scaling factor each run |
+| Click coordinates | For DPI-aware tools (physical coordinates) | For non-DPI-aware PowerShell (logical coordinates) |
 
-两者结论看似矛盾（点击用物理 vs 逻辑坐标），实际前提不同：坐标行为取决于**进程是否 DPI-aware**。
+The two conclusions look contradictory (physical vs logical coordinates for clicking), but the premises differ: the coordinate behavior depends on **whether the process is DPI-aware**.
 
 ## License
 
