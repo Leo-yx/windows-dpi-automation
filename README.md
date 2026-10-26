@@ -2,7 +2,7 @@
 
 **Fix Windows DPI coordinate scaling for desktop automation (PowerShell + .NET, zero dependencies).**
 
-This is a solution to  the mismatch between screenshot and click coordinates in PowerShell/Windows API under Windows DPI scaling. Completely realized by PowerShell + .NET , do not need to install anything else.
+This is a solution to  the mismatch between screenshot and click coordinates in PowerShell/Windows API under Windows DPI scaling. Completely realized by PowerShell + .NET , do not need to install anything else.(All code in this project was written by AI)
 
 
 ## The Problem
