@@ -1,0 +1,13 @@
+# 忽略截图输出
+*.png
+*.jpg
+*.jpeg
+screenshot*.png
+
+# 忽略状态/缓存
+state/
+__pycache__/
+
+# 忽略系统文件
+Thumbs.db
+.DS_Store
